@@ -31,6 +31,7 @@ class SoundAndSpeechService {
   private onProgressCallback: ((info: SpeechProgressInfo) => void) | null = null;
   private onEndCallback: (() => void) | null = null;
   private voice: SpeechSynthesisVoice | null = null;
+  private currentSessionId: number = 0;
 
   constructor() {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -82,6 +83,7 @@ class SoundAndSpeechService {
   }
 
   public stop() {
+    this.currentSessionId++;
     if (this.synth) {
       try {
         this.synth.cancel();
@@ -195,7 +197,7 @@ class SoundAndSpeechService {
     this.onProgressCallback = options?.onProgress || null;
     this.onEndCallback = options?.onEnd || null;
 
-    this.playNextChunk(options?.rate ?? 0.9, options?.pitch ?? 1.05);
+    this.playNextChunk(options?.rate ?? 1.02, options?.pitch ?? 1.05);
   }
 
   private playCustomAudio(
@@ -404,6 +406,9 @@ class SoundAndSpeechService {
     };
 
     utterance.onerror = (e) => {
+      if (e.error === 'interrupted' || e.error === 'canceled') {
+        return;
+      }
       console.warn("Utterance error:", e);
       this.currentChunkIndex++;
       if (this.isSpeaking) {
@@ -441,15 +446,16 @@ class SoundAndSpeechService {
       return;
     }
 
+    const sessionId = ++this.currentSessionId;
+
     // Structured parts
     const parts: Array<{ part: 'intro' | 'question' | 'A' | 'B' | 'C' | 'D' | 'prompt'; text: string }> = [
       { part: 'intro', text: `Câu hỏi số ${questionNumber}.` },
       { part: 'question', text: questionText },
-      { part: 'A', text: `Phương án A: ${options.A}` },
-      { part: 'B', text: `Phương án B: ${options.B}` },
-      { part: 'C', text: `Phương án C: ${options.C}` },
-      { part: 'D', text: `Phương án D: ${options.D}` },
-      { part: 'prompt', text: `Xin mời đội ${teamName} thảo luận và đưa ra đáp án!` }
+      { part: 'A', text: `Đáp án A: ${options.A}` },
+      { part: 'B', text: `Đáp án B: ${options.B}` },
+      { part: 'C', text: `Đáp án C: ${options.C}` },
+      { part: 'D', text: `Đáp án D: ${options.D}` }
     ];
 
     // If custom audio is uploaded for this question, play it
@@ -457,8 +463,13 @@ class SoundAndSpeechService {
       const chunks = parts.map(p => p.text);
       this.playCustomAudio(
         settings.audioUrl,
-        settings.onEnd,
+        () => {
+          if (this.currentSessionId === sessionId && settings.onEnd) {
+            settings.onEnd();
+          }
+        },
         (chunk) => {
+          if (this.currentSessionId !== sessionId) return;
           const match = parts.find(p => p.text === chunk);
           if (match && settings.onPartChange) {
             settings.onPartChange(match.part, match.text);
@@ -480,7 +491,9 @@ class SoundAndSpeechService {
     this.isPaused = false;
 
     const playPart = () => {
-      if (currentIndex >= parts.length || !this.isSpeaking) {
+      if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
+
+      if (currentIndex >= parts.length) {
         this.isSpeaking = false;
         if (settings?.onPartChange) settings.onPartChange('prompt', '');
         if (settings?.onEnd) settings.onEnd();
@@ -501,7 +514,7 @@ class SoundAndSpeechService {
       if (this.voice) {
         utterance.voice = this.voice;
       }
-      utterance.rate = settings?.rate ?? 0.92;
+      utterance.rate = settings?.rate ?? 1.08;
       utterance.pitch = settings?.pitch ?? 1.05;
 
       if (typeof window !== 'undefined') {
@@ -509,30 +522,66 @@ class SoundAndSpeechService {
       }
 
       utterance.onend = () => {
+        if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
         currentIndex++;
+        if (currentIndex >= parts.length) {
+          this.isSpeaking = false;
+          if (settings?.onPartChange) settings.onPartChange('prompt', '');
+          if (settings?.onEnd) settings.onEnd();
+          return;
+        }
         setTimeout(() => {
-          if (this.isSpeaking) {
+          if (this.currentSessionId === sessionId && this.isSpeaking) {
             playPart();
           }
-        }, item.part === 'question' ? 400 : 250);
+        }, item.part === 'question' ? 260 : 160);
       };
 
-      utterance.onerror = () => {
+      utterance.onerror = (e) => {
+        if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
+        if (e.error === 'interrupted' || e.error === 'canceled') {
+          // Session was stopped or replaced, do not skip or trigger onEnd
+          return;
+        }
+        console.warn("Utterance error:", e.error);
         currentIndex++;
-        if (this.isSpeaking) {
-          playPart();
+        if (currentIndex < parts.length) {
+          setTimeout(() => {
+            if (this.currentSessionId === sessionId && this.isSpeaking) {
+              playPart();
+            }
+          }, 100);
+        } else {
+          this.isSpeaking = false;
+          if (settings?.onPartChange) settings.onPartChange('prompt', '');
+          if (settings?.onEnd) settings.onEnd();
         }
       };
 
       this.currentUtterance = utterance;
       try {
-        this.synth?.speak(utterance);
+        if (this.synth.paused) {
+          this.synth.resume();
+        }
+        this.synth.speak(utterance);
       } catch (e) {
         console.warn("Speak error:", e);
+        currentIndex++;
+        if (currentIndex < parts.length) {
+          playPart();
+        } else {
+          this.isSpeaking = false;
+          if (settings?.onEnd) settings.onEnd();
+        }
       }
     };
 
-    playPart();
+    // 60ms settling delay after cancel() ensures Chromium speech synthesis queue is cleanly ready
+    setTimeout(() => {
+      if (this.currentSessionId === sessionId && this.isSpeaking) {
+        playPart();
+      }
+    }, 60);
   }
 
   /**
@@ -675,6 +724,64 @@ class SoundAndSpeechService {
   }
 
   /**
+   * Alert chime when switching from 20s thinking to 10s answering phase
+   */
+  public playAnswerPhaseAlert() {
+    if (this.isMuted) return;
+    this.initAudioContext();
+    if (!this.audioCtx) return;
+    const now = this.audioCtx.currentTime;
+
+    // Vibrant energetic double chime: F5 (698Hz) -> C6 (1046Hz)
+    [698.46, 1046.5].forEach((freq, i) => {
+      if (!this.audioCtx) return;
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + i * 0.11);
+
+      gain.gain.setValueAtTime(0, now + i * 0.11);
+      gain.gain.linearRampToValueAtTime(0.25, now + i * 0.11 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.11 + 0.35);
+
+      osc.connect(gain);
+      gain.connect(this.audioCtx.destination);
+
+      osc.start(now + i * 0.11);
+      osc.stop(now + i * 0.11 + 0.38);
+    });
+  }
+
+  /**
+   * Crisp digital "pip" beep sound when question finishes reading to alert everyone to start timer
+   */
+  public playQuestionEndPip() {
+    if (this.isMuted) return;
+    this.initAudioContext();
+    if (!this.audioCtx) return;
+    const now = this.audioCtx.currentTime;
+
+    // Crisp high-pitch electronic "PIP" beep (1046.5Hz C6 -> 1174.6Hz D6 upward digital chirp)
+    const osc = this.audioCtx.createOscillator();
+    const gain = this.audioCtx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1046.5, now);
+    osc.frequency.linearRampToValueAtTime(1174.66, now + 0.09);
+
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.38, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+    osc.connect(gain);
+    gain.connect(this.audioCtx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.24);
+  }
+
+  /**
    * Victory triumphant fanfare
    */
   public playVictoryFanfare(customUrl?: string) {
@@ -719,6 +826,61 @@ class SoundAndSpeechService {
 
       osc.start(now + item.time);
       osc.stop(now + item.time + item.dur);
+    });
+  }
+
+  /**
+   * Countdown timer tick sound (gentle blip for last seconds)
+   */
+  public playTimerTickSound() {
+    if (this.isMuted) return;
+    this.initAudioContext();
+    if (!this.audioCtx) return;
+    const now = this.audioCtx.currentTime;
+
+    const osc = this.audioCtx.createOscillator();
+    const gain = this.audioCtx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.exponentialRampToValueAtTime(440, now + 0.04);
+
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+    osc.connect(gain);
+    gain.connect(this.audioCtx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.05);
+  }
+
+  /**
+   * Time-up gong / alarm sound when 20s expires
+   */
+  public playTimeUpSound() {
+    if (this.isMuted) return;
+    this.initAudioContext();
+    if (!this.audioCtx) return;
+    const now = this.audioCtx.currentTime;
+
+    // Dual-tone buzzer: 440Hz -> 330Hz
+    [440, 330].forEach((freq, i) => {
+      if (!this.audioCtx) return;
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, now + i * 0.12);
+
+      gain.gain.setValueAtTime(0.2, now + i * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.28);
+
+      osc.connect(gain);
+      gain.connect(this.audioCtx.destination);
+
+      osc.start(now + i * 0.12);
+      osc.stop(now + i * 0.12 + 0.3);
     });
   }
 }

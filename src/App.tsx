@@ -36,6 +36,9 @@ export default function App() {
   // Winner state
   const [winnerTeam, setWinnerTeam] = useState<1 | 2 | null>(null);
 
+  // Question count mode: 10 questions (1-10) or full 16 questions
+  const [questionCountMode, setQuestionCountMode] = useState<10 | 16>(10);
+
   // History stack for Undo (Hoàn tác)
   const [historyStack, setHistoryStack] = useState<GameHistoryState[]>([]);
 
@@ -90,10 +93,11 @@ export default function App() {
   };
 
   // Team Setup Confirmed -> Start Playing Arena
-  const handleConfirmTeams = (t1: string, t2: string, firstTeam: 1 | 2) => {
+  const handleConfirmTeams = (t1: string, t2: string, firstTeam: 1 | 2, mode: 10 | 16) => {
     setTeam1Name(t1);
     setTeam2Name(t2);
     setActiveTeam(firstTeam);
+    setQuestionCountMode(mode);
     setTeam1Score(0);
     setTeam2Score(0);
     setOpenedQuestions([]);
@@ -103,7 +107,7 @@ export default function App() {
     // AZero announces the first turn
     const firstTeamName = firstTeam === 1 ? t1 : t2;
     speechService.speakTextChunks(
-      `Trận đấu chính thức bắt đầu! Xin mời ${firstTeamName} lựa chọn câu hỏi đầu tiên!`,
+      `Trận đấu ${mode} câu hỏi chính thức bắt đầu! Xin mời ${firstTeamName} lựa chọn câu hỏi đầu tiên!`,
       {
         rate: 0.9,
         pitch: 1.05,
@@ -115,6 +119,13 @@ export default function App() {
   // Select a question from 16-card grid
   const handleSelectQuestion = (qId: number) => {
     speechService.stop();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.resume();
+      } catch (e) {
+        console.warn("speech resume err", e);
+      }
+    }
     setCurrentQuestionId(qId);
     setPhase('question_active');
   };
@@ -161,13 +172,13 @@ export default function App() {
       const nextOpened = [...openedQuestions, currentQuestionId];
       setOpenedQuestions(nextOpened);
 
-      // Check if all 16 questions are completed
-      if (nextOpened.length >= 16) {
+      // Check if all questions are completed in current mode (10 or 16)
+      if (nextOpened.length >= questionCountMode) {
         if (team1Score === team2Score) {
           // Tie breaker needed!
           setPhase('tie_breaker');
           speechService.speakTextChunks(
-            "Thật bất ngờ! Sau 16 câu hỏi, hai đội đang có số câu trả lời đúng bằng nhau. Chúng ta sẽ cần một câu hỏi phụ để tìm ra đội chiến thắng chung cuộc!",
+            `Thật bất ngờ! Sau ${questionCountMode} câu hỏi, hai đội đang có số câu trả lời đúng bằng nhau. Chúng ta sẽ cần một câu hỏi phụ để tìm ra đội chiến thắng chung cuộc!`,
             { rate: 0.9, pitch: 1.05 }
           );
         } else {
@@ -248,21 +259,27 @@ export default function App() {
   };
 
   return (
-    <main className="w-full h-screen relative flex flex-col bg-[#070b14] font-sans select-none text-slate-100 overflow-hidden">
-      {/* Top Header for Game Match (Cyber Modern Dark Header) */}
+    <main className={`w-full h-screen relative flex flex-col font-sans select-none overflow-hidden ${
+      phase === 'playing' || phase === 'question_active'
+        ? 'bg-slate-100 text-slate-900'
+        : 'bg-[#070b14] text-slate-100'
+    }`}>
+      {/* Top Header for Game Match (Clean Modern Stadium Header) */}
       {(phase === 'playing' || phase === 'question_active') && (
-        <header className="h-14 sm:h-16 bg-[#0c1427]/90 backdrop-blur-md border-b border-cyan-500/30 flex items-center justify-between px-6 sm:px-8 shrink-0 z-10 shadow-[0_4px_20px_rgba(0,0,0,0.5)] text-white">
+        <header className="h-14 sm:h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sm:px-8 shrink-0 z-10 shadow-sm text-slate-900">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center text-slate-950 font-black text-lg shadow-[0_0_15px_rgba(6,182,212,0.4)]">
+            <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-sm">
               A0
             </div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white leading-none uppercase">
-              KÉO CO <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">TRÍ TUỆ</span>
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 leading-none uppercase">
+              KÉO CO <span className="text-blue-600">TRÍ TUỆ</span>
             </h1>
           </div>
           <div className="flex gap-3 items-center">
-            <div className="px-3.5 py-1.5 bg-slate-900/90 rounded-full text-xs font-bold text-cyan-300 uppercase tracking-wider border border-cyan-500/30 shadow-sm">
-              THPT TÔ HIỆU • LỚP 11A0
+            <div className="px-3.5 py-1.5 bg-slate-100 rounded-full text-xs font-black text-slate-700 uppercase tracking-wider border border-slate-200 shadow-sm flex items-center gap-2">
+              <span>THPT TÔ HIỆU • LỚP 11A0</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+              <span className="text-blue-700 font-black">BẢN {questionCountMode} CÂU</span>
             </div>
           </div>
         </header>
@@ -291,20 +308,21 @@ export default function App() {
         />
       )}
 
-      {/* 2. TEAM SETUP MODAL */}
+      {/* 2. TEAM SETUP & MODE MODAL */}
       {phase === 'team_setup' && (
         <TeamSetupModal
           defaultTeam1={team1Name}
           defaultTeam2={team2Name}
+          questionCountMode={questionCountMode}
           onConfirm={handleConfirmTeams}
         />
       )}
 
-      {/* 3. MAIN ARENA & QUESTIONS (Fit tightly in 16:9 view without scroll) */}
+      {/* 3. MAIN ARENA & QUESTIONS (Balanced full-height responsive layout: top stadium + bottom question deck filling the screen) */}
       {(phase === 'playing' || phase === 'question_active') && (
-        <div className="flex-1 flex flex-col justify-between overflow-hidden relative p-3 sm:p-4">
-          {/* Top Tug Of War Arena */}
-          <div className="h-[52%] w-full">
+        <div className="flex-1 flex flex-col overflow-hidden relative p-2.5 sm:p-3.5 bg-slate-100 gap-2.5 sm:gap-3.5 min-h-0">
+          {/* Top Tug Of War Arena: Takes top half of the game canvas (~48%), players scale up dynamically */}
+          <div className="flex-[1.05] min-h-[220px] max-h-[50%] w-full overflow-hidden shrink-0">
             <TugOfWarArena
               team1Name={team1Name}
               team2Name={team2Name}
@@ -316,10 +334,10 @@ export default function App() {
             />
           </div>
 
-          {/* Bottom Deck: 16-Question Grid & Compact AZero Supervisor (Dark Cyber Glass Card) */}
-          <div className="h-[46%] w-full flex items-center justify-between gap-4 mt-2 bg-[#0c1427]/90 backdrop-blur-md rounded-2xl border border-slate-800 p-2 sm:p-3 shadow-xl">
-            {/* AZero Corner Supervisor (Compact, placed on the left side) */}
-            <div className="hidden md:flex flex-col items-center justify-center shrink-0 w-64 px-2">
+          {/* Bottom Deck: Takes the remaining lower half (~52%), comfortably filling the screen */}
+          <div className="flex-1 min-h-[220px] w-full flex items-center justify-between gap-3 sm:gap-5 bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-sm overflow-hidden">
+            {/* AZero Corner Supervisor (Placed on the left side) */}
+            <div className="hidden md:flex flex-col items-center justify-center shrink-0 w-52 lg:w-60 px-2">
               <AZeroMascot
                 size="compact"
                 isSpeaking={speechService.isSpeaking}
@@ -332,17 +350,19 @@ export default function App() {
                 onToggleMute={toggleMute}
                 badgeLabel="AZero • Trọng tài AI"
                 bubblePosition="top"
+                lightTheme={true}
               />
             </div>
 
-            {/* 16 Questions 4x4 Grid */}
-            <div className="flex-1 flex items-center justify-center">
+            {/* Questions Grid: 10 cards (5x2) or 16 cards (4x4) */}
+            <div className="flex-1 flex items-center justify-center h-full min-h-0 w-full">
               <QuestionGrid
                 openedQuestions={openedQuestions}
                 onSelectQuestion={handleSelectQuestion}
                 activeTeam={activeTeam}
                 team1Name={team1Name}
                 team2Name={team2Name}
+                maxQuestions={questionCountMode}
               />
             </div>
           </div>

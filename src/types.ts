@@ -19,6 +19,7 @@ export interface GameContentConfig {
   tieBreakerQuestion: Question;
   defaultTeam1Name: string;
   defaultTeam2Name: string;
+  questionCountMode?: 10 | 16;
   azeroImageUrl?: string;
   greetingAudioUrl?: string;
   correctSoundUrl?: string;

@@ -256,16 +256,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             <span>Xem Luật chơi</span>
           </button>
 
-          {/* Button 3: Giọng đọc */}
-          <button
-            onClick={handleToggleVoice}
-            title="Đổi giọng đọc AI / File"
-            className="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-          >
-            <Mic className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Giọng {audioMode === 'custom' ? 'File thu âm' : voiceName}</span>
-          </button>
-
           {/* Mute button */}
           <button
             onClick={onToggleMute}
@@ -311,7 +301,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
           {/* Subtitle */}
           <p className="text-sm sm:text-base text-slate-300 font-medium mt-2 max-w-lg">
-            Cùng <span className="text-cyan-300 font-black">AZero</span> tranh tài kiến thức 16 câu hỏi
+            Cùng <span className="text-cyan-300 font-black">AZero</span> tranh tài kiến thức và đối kháng kéo co đầy kịch tính!
           </p>
 
           {/* Mascot Robot & Live Speech / Primary CTA */}
@@ -339,10 +329,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               <div className="px-3.5 py-1 rounded-full bg-slate-900/90 border border-slate-800 text-[11px] font-bold text-slate-300 flex items-center gap-1.5 shadow-sm">
                 <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
                 <span>AI AZero • 11A0 Robotics</span>
-              </div>
-              <div className="px-3.5 py-1 rounded-full bg-slate-900/90 border border-slate-800 text-[11px] font-bold text-slate-400 flex items-center gap-1.5 shadow-sm">
-                <Mic className="w-3 h-3 text-cyan-400" />
-                <span>Giọng đọc: {audioMode === 'custom' && greetingAudioUrl ? 'File thu âm riêng' : voiceName}</span>
               </div>
             </div>
           </div>
@@ -444,21 +430,22 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               </motion.button>
 
               {/* Sub-actions underneath the big button */}
-              <div className="flex items-center gap-2.5">
+              <div className="flex flex-wrap items-center justify-center gap-2.5">
                 <button
                   onClick={() => setCurrentView('rules')}
-                  className="px-3.5 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
                 >
                   <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Xem trước luật chơi</span>
+                  <span>Xem luật chơi</span>
                 </button>
 
                 <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-3.5 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                  onClick={onStartGame}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.35)] transition cursor-pointer border border-emerald-300"
+                  title="Vào thẳng trận đấu thi đấu ngay"
                 >
-                  <FileAudio className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Nạp file ghi âm AZero</span>
+                  <span>VÀO THI ĐẤU NGAY</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
@@ -479,10 +466,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               <div className="px-3 py-1 rounded-full bg-slate-900/90 border border-slate-800 text-[11px] font-bold text-slate-300 flex items-center gap-1.5 shadow-sm">
                 <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
                 <span>AI AZero • 11A0 Robotics</span>
-              </div>
-              <div className="px-3 py-1 rounded-full bg-slate-900/90 border border-slate-800 text-[11px] font-bold text-slate-400 flex items-center gap-1.5 shadow-sm">
-                <Mic className="w-3 h-3 text-cyan-400" />
-                <span>Giọng đọc: {audioMode === 'custom' && greetingAudioUrl ? 'File thu âm riêng' : voiceName}</span>
               </div>
             </div>
 
@@ -520,7 +503,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                     1. CHỌN Ô & TRẢ LỜI CÂU HỎI
                   </h3>
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-cyan-950 border border-cyan-500/40 text-cyan-300">
-                    16 CÂU HỎI
+                    NGÂN HÀNG CÂU HỎI
                   </span>
                   {activeRuleCard === 1 && (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-cyan-400 text-slate-950 animate-pulse">
@@ -530,7 +513,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 </div>
 
                 <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
-                  Trên màn hình có 16 ô câu hỏi và hai đội sẽ lần lượt lựa chọn một ô bất kỳ. Sau khi ô được mở, mình sẽ đọc câu hỏi cùng bốn phương án trả lời A, B, C và D.
+                  Trên màn hình có các ô câu hỏi và hai đội sẽ lần lượt lựa chọn một ô bất kỳ. Sau khi ô được mở, mình sẽ đọc câu hỏi cùng bốn phương án trả lời A, B, C và D.
                 </p>
 
                 <div className="mt-2 text-xs text-cyan-400 font-bold flex items-center gap-1.5">
@@ -610,7 +593,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 </div>
 
                 <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
-                  Sau khi hoàn thành cả 16 câu hỏi, đội nào kéo được sợi dây về phía mình nhiều hơn sẽ giành chiến thắng. Trong trường hợp hai đội có kết quả bằng nhau, chúng ta sẽ bước vào câu hỏi phụ để tìm ra đội chiến thắng chung cuộc.
+                  Sau khi hoàn thành tất cả các câu hỏi, đội nào kéo được sợi dây về phía mình nhiều hơn sẽ giành chiến thắng. Trong trường hợp hai đội có kết quả bằng nhau, chúng ta sẽ bước vào câu hỏi phụ để tìm ra đội chiến thắng chung cuộc.
                 </p>
 
                 <div className="mt-2 text-xs text-amber-400 font-bold flex items-center gap-1.5">

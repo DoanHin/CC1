@@ -18,6 +18,7 @@ interface AZeroMascotProps {
   bubblePosition?: 'top' | 'right' | 'left' | 'bottom';
   glowColor?: string;
   badgeLabel?: string;
+  lightTheme?: boolean;
 }
 
 export const AZeroMascot: React.FC<AZeroMascotProps> = ({
@@ -34,7 +35,8 @@ export const AZeroMascot: React.FC<AZeroMascotProps> = ({
   showSpeechBubble = true,
   showBadge = false,
   bubblePosition = 'top',
-  badgeLabel = "AZero • 11A0 Robotics"
+  badgeLabel = "AZero • 11A0 Robotics",
+  lightTheme = false
 }) => {
   const isLarge = size === 'large';
   const isCompact = size === 'compact';
@@ -48,10 +50,14 @@ export const AZeroMascot: React.FC<AZeroMascotProps> = ({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.25 }}
-          className={`z-30 max-w-xl px-5 py-3.5 rounded-2xl shadow-xl border-2 ${
-            isSpeaking
-              ? 'bg-blue-900 border-blue-600 text-white ring-2 ring-blue-400/50'
-              : 'bg-blue-950 border-blue-800 text-blue-100'
+          className={`z-30 max-w-xl px-4 sm:px-5 py-2.5 sm:py-3.5 rounded-2xl shadow-md border-2 ${
+            lightTheme
+              ? isSpeaking
+                ? 'bg-blue-50 border-blue-400 text-blue-950 ring-2 ring-blue-200'
+                : 'bg-white border-slate-200 text-slate-800'
+              : isSpeaking
+                ? 'bg-blue-900 border-blue-600 text-white ring-2 ring-blue-400/50'
+                : 'bg-blue-950 border-blue-800 text-blue-100'
           } ${
             bubblePosition === 'top'
               ? 'mb-4'
@@ -347,7 +353,11 @@ export const AZeroMascot: React.FC<AZeroMascotProps> = ({
       {/* Robot Name & Badge */}
       {showBadge && (
         <div className="mt-2 text-center">
-          <span className="inline-block px-3 py-1 bg-slate-900 border border-slate-700 text-cyan-300 font-bold text-xs rounded-full shadow-sm">
+          <span className={`inline-block px-3 py-1 text-xs font-black rounded-full shadow-sm ${
+            lightTheme
+              ? 'bg-slate-100 border border-slate-300 text-slate-800'
+              : 'bg-slate-900 border border-slate-700 text-cyan-300'
+          }`}>
             {badgeLabel}
           </span>
         </div>
