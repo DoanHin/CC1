@@ -44,7 +44,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
 }) => {
   const [evaluatedResult, setEvaluatedResult] = useState<'correct' | 'wrong' | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
-  const [currentReadingPart, setCurrentReadingPart] = useState<'intro' | 'question' | 'A' | 'B' | 'C' | 'D' | 'prompt' | null>(null);
+  const [currentReadingPart, setCurrentReadingPart] = useState<'question' | 'A' | 'B' | 'C' | 'D' | 'prompt' | null>(null);
   
   // 30-second countdown timer states (20s thinking + 10s answering)
   const TOTAL_TIME = 30;
@@ -141,7 +141,7 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
     setTimeLeft(TOTAL_TIME);
 
     setIsPlayingAudio(true);
-    setCurrentReadingPart('intro');
+    setCurrentReadingPart('question');
 
     // Unpause speech synthesis if suspended by browser
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -159,10 +159,10 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
       currentTeamName,
       {
         audioUrl: question.audioUrl,
-        rate: 1.08,
-        pitch: 1.05,
+        rate: 1.02,
+        pitch: 1.0,
         onPartChange: (part) => {
-          setCurrentReadingPart(part);
+          setCurrentReadingPart(part as 'question' | 'A' | 'B' | 'C' | 'D' | 'prompt');
         },
         onEnd: () => {
           setIsPlayingAudio(false);
@@ -189,7 +189,10 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
     e.stopPropagation();
     setCurrentReadingPart(key);
     setIsPlayingAudio(true);
-    speechService.speakSingleOption(key, text);
+    speechService.speakSingleOption(key, text, () => {
+      setIsPlayingAudio(false);
+      setCurrentReadingPart(null);
+    });
   };
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -299,6 +302,16 @@ export const QuestionModal: React.FC<QuestionModalProps> = ({
 
             {/* QUESTION AUDIO CONTROLS */}
             <div className="flex items-center gap-2">
+              {/* Vietnamese Auto Reading Badge */}
+              <div
+                title="Hệ thống tự động đọc câu hỏi và các đáp án A, B, C, D"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-cyan-500/40 bg-cyan-500/10 text-cyan-300 text-xs font-bold shadow-xs"
+              >
+                <span>🇻🇳</span>
+                <span className="hidden sm:inline">Đọc tự động</span>
+                <span className="sm:hidden">Đọc tự động</span>
+              </div>
+
               {/* Replay/Read button */}
               <button
                 type="button"

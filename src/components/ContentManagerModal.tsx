@@ -26,6 +26,7 @@ export const ContentManagerModal: React.FC<ContentManagerModalProps> = ({
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [playingAudioUrl, setPlayingAudioUrl] = useState<string | null>(null);
+  const [localTtsEngine, setLocalTtsEngine] = useState<'online' | 'system'>(speechService.getTtsEngine());
   const audioTestRef = useRef<HTMLAudioElement | null>(null);
 
   const currentQ = formData.questions[selectedQuestionIndex] || formData.questions[0];
@@ -479,6 +480,97 @@ export const ContentManagerModal: React.FC<ContentManagerModalProps> = ({
           {/* TAB 3: MEDIA & SOUNDS */}
           {activeTab === 'media' && (
             <div className="space-y-4 max-w-3xl mx-auto">
+              {/* Vietnamese TTS Synchronizer Engine Selection */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/50 via-slate-900 to-cyan-950/50 border border-emerald-500/40 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🇻🇳</span>
+                    <div>
+                      <h4 className="text-sm font-black text-white uppercase tracking-wide">
+                        Đồng bộ giọng đọc Tiếng Việt (TTS)
+                      </h4>
+                      <p className="text-xs text-slate-300">
+                        Đảm bảo mọi thiết bị (máy tính trường học, iPad, laptop) đều đọc chuẩn giọng Tiếng Việt
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      speechService.speakQuestionAndOptions(
+                        1,
+                        "Kéo co là một trò chơi dân gian rèn luyện tinh thần đoàn kết và sức mạnh.",
+                        {
+                          A: "Tinh thần đoàn kết",
+                          B: "Chạy thật nhanh",
+                          C: "Nhảy cao",
+                          D: "Bơi lội"
+                        },
+                        "Đội A"
+                      );
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Play className="w-3.5 h-3.5" />
+                    <span>Nghe thử đọc câu hỏi</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  <div
+                    onClick={() => {
+                      speechService.setTtsEngine('online');
+                      setLocalTtsEngine('online');
+                    }}
+                    className={`p-3 rounded-xl border transition cursor-pointer ${
+                      localTtsEngine === 'online'
+                        ? 'bg-emerald-950/70 border-emerald-400 ring-1 ring-emerald-400 text-white shadow-md'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold text-xs mb-1">
+                      <span className="flex items-center gap-1.5 text-emerald-300">
+                        <span>🌐</span> Giọng chuẩn Online (Đồng bộ 100%)
+                      </span>
+                      {localTtsEngine === 'online' && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500 text-slate-950 font-black">
+                          Đang kích hoạt
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                      Phát trực tiếp giọng đọc chuẩn Tiếng Việt tự nhiên. Máy nào mở cũng đọc bằng Tiếng Việt 100%, không bị phụ thuộc vào gói ngôn ngữ Windows/trình duyệt.
+                    </p>
+                  </div>
+
+                  <div
+                    onClick={() => {
+                      speechService.setTtsEngine('system');
+                      setLocalTtsEngine('system');
+                    }}
+                    className={`p-3 rounded-xl border transition cursor-pointer ${
+                      localTtsEngine === 'system'
+                        ? 'bg-amber-950/70 border-amber-400 ring-1 ring-amber-400 text-white shadow-md'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold text-xs mb-1">
+                      <span className="flex items-center gap-1.5 text-amber-300">
+                        <span>💻</span> Giọng hệ thống thiết bị (Offline)
+                      </span>
+                      {localTtsEngine === 'system' && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500 text-slate-950 font-black">
+                          Đang kích hoạt
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Sử dụng giọng nói cài sẵn trong máy tính/điện thoại. Nếu máy tính chưa cài gói tiếng Việt, hệ thống sẽ tự động dùng giọng chuẩn online.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* AZero image */}
               <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm">
                 <div className="flex items-center justify-between mb-1.5">
