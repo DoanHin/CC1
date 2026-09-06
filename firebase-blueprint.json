@@ -1,0 +1,89 @@
+{
+  "entities": {
+    "GameConfig": {
+      "title": "GameConfig",
+      "description": "Configuration and questions for the Tug of War game",
+      "type": "object",
+      "properties": {
+        "welcomeGreetingText": {
+          "type": "string",
+          "description": "Text read by AZero during welcome greeting"
+        },
+        "rulesIntroText": {
+          "type": "string",
+          "description": "Intro text explaining game rules"
+        },
+        "defaultTeam1Name": {
+          "type": "string",
+          "description": "Default name for Team 1"
+        },
+        "defaultTeam2Name": {
+          "type": "string",
+          "description": "Default name for Team 2"
+        },
+        "questions": {
+          "type": "array",
+          "description": "Array of 16 match questions"
+        },
+        "tieBreakerQuestion": {
+          "type": "object",
+          "description": "Extra tie breaker question"
+        },
+        "greetingAudioUrl": {
+          "type": "string",
+          "description": "Short URL or indicator for greeting audio"
+        },
+        "hasLargeGreetingAudio": {
+          "type": "boolean",
+          "description": "Indicates greeting audio is stored in game_media chunks"
+        },
+        "greetingAudioChunks": {
+          "type": "number",
+          "description": "Total number of chunks for greeting audio"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      }
+    },
+    "MediaChunk": {
+      "title": "MediaChunk",
+      "description": "Chunked media data to prevent exceeding Firestore 1MB document size limit",
+      "type": "object",
+      "properties": {
+        "assetKey": {
+          "type": "string",
+          "description": "Key identifier for the asset (e.g., greeting_audio)"
+        },
+        "chunkIndex": {
+          "type": "number",
+          "description": "Index of this chunk starting from 0"
+        },
+        "totalChunks": {
+          "type": "number",
+          "description": "Total count of chunks"
+        },
+        "data": {
+          "type": "string",
+          "description": "Base64 data segment for this chunk"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of chunk creation"
+        }
+      },
+      "required": ["assetKey", "chunkIndex", "totalChunks", "data"]
+    }
+  },
+  "firestore": {
+    "/game_config/{configId}": {
+      "schema": "GameConfig",
+      "description": "Stores main game configuration and questions"
+    },
+    "/game_media/{chunkId}": {
+      "schema": "MediaChunk",
+      "description": "Stores split media chunks for large recordings"
+    }
+  }
+}
