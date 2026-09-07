@@ -80,6 +80,157 @@ export function splitTextForTTS(text: string, maxLen = 140): string[] {
   return chunks;
 }
 
+/**
+ * Singleton state for Vietnamese voice
+ */
+let vietnameseVoice: SpeechSynthesisVoice | null = null;
+let isVoicesListenerAttached = false;
+
+// Remove any existing toast if present in DOM
+if (typeof document !== 'undefined') {
+  const existingToast = document.getElementById('no-vi-voice-toast');
+  if (existingToast) existingToast.remove();
+}
+
+/**
+ * Discover and return only genuine Vietnamese voice.
+ * Never return an English voice or the OS/browser default non-Vietnamese voice.
+ */
+export function loadVietnameseVoice(): SpeechSynthesisVoice | null {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    vietnameseVoice = null;
+    return null;
+  }
+
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices || voices.length === 0) {
+    return null;
+  }
+
+  // 1. Priority 1: Exact match "vi-VN" (case-insensitive)
+  const exactVi = voices.find(voice => {
+    const lang = (voice.lang || '').toLowerCase().replace(/_/g, '-');
+    return lang === 'vi-vn';
+  });
+  if (exactVi) {
+    vietnameseVoice = exactVi;
+    return exactVi;
+  }
+
+  // 2. Priority 2: Language code starts with "vi" or "vie"
+  const startVi = voices.find(voice => {
+    const lang = (voice.lang || '').toLowerCase().replace(/_/g, '-');
+    return lang.startsWith('vi') || lang.startsWith('vie');
+  });
+  if (startVi) {
+    vietnameseVoice = startVi;
+    return startVi;
+  }
+
+  // 3. Priority 3: Name explicitly indicates Vietnamese
+  const nameVi = voices.find(voice => {
+    const name = (voice.name || '').toLowerCase();
+    return (
+      name.includes('vietnam') ||
+      name.includes('tiếng việt') ||
+      name.includes('tieng viet') ||
+      name.includes('vietnamese') ||
+      name.includes('hoaimy') ||
+      name.includes('namminh') ||
+      name.includes('linh') ||
+      name.includes('mai') ||
+      name.includes('an')
+    );
+  });
+  if (nameVi) {
+    vietnameseVoice = nameVi;
+    return nameVi;
+  }
+
+  // ABSOLUTE BAN: NEVER fallback to default non-Vietnamese voice or English voice!
+  vietnameseVoice = null;
+  return null;
+}
+
+/**
+ * Handle asynchronous voice loading across browsers (Chrome, Edge, Cốc Cốc, Safari, Firefox)
+ */
+export function ensureVietnameseVoiceLoaded(): Promise<SpeechSynthesisVoice | null> {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    return Promise.resolve(null);
+  }
+
+  const immediate = loadVietnameseVoice();
+  if (immediate) {
+    return Promise.resolve(immediate);
+  }
+
+  return new Promise((resolve) => {
+    let resolved = false;
+
+    const onVoices = () => {
+      if (resolved) return;
+      resolved = true;
+      const v = loadVietnameseVoice();
+      resolve(v);
+    };
+
+    if (window.speechSynthesis.getVoices().length > 0) {
+      const v = loadVietnameseVoice();
+      if (v) {
+        resolved = true;
+        resolve(v);
+        return;
+      }
+    }
+
+    window.speechSynthesis.addEventListener('voiceschanged', onVoices, { once: true });
+    window.speechSynthesis.onvoiceschanged = onVoices;
+
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        resolve(loadVietnameseVoice());
+      }
+    }, 350);
+  });
+}
+
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  loadVietnameseVoice();
+  if (!isVoicesListenerAttached) {
+    const handleVoices = () => {
+      loadVietnameseVoice();
+    };
+    window.speechSynthesis.addEventListener('voiceschanged', handleVoices);
+    window.speechSynthesis.onvoiceschanged = handleVoices;
+    isVoicesListenerAttached = true;
+  }
+}
+
+/**
+ * High-level Vietnamese speech helper adhering strictly to requirements:
+ * - Always lang = "vi-VN"
+ * - Always uses Vietnamese voice if available
+ * - Uses online Vietnamese TTS if device lacks Vietnamese voice
+ * - Never uses English voice
+ */
+export async function speakVietnamese(
+  text: string,
+  options?: {
+    rate?: number;
+    pitch?: number;
+    volume?: number;
+    onEnd?: () => void;
+  }
+) {
+  if (!text || !text.trim()) {
+    if (options?.onEnd) options.onEnd();
+    return;
+  }
+  await speechService.speakSingleText(text, options);
+}
+
 class SoundAndSpeechService {
   private synth: SpeechSynthesis | null = null;
   private audioCtx: AudioContext | null = null;
@@ -91,8 +242,8 @@ class SoundAndSpeechService {
   public isPaused: boolean = false;
   public activeChunk: string = '';
 
-  // Synchronized TTS Engine Mode: 'online' (Google Vietnamese audio) | 'system' (device SpeechSynthesis)
-  public ttsEngine: 'online' | 'system' = 'online';
+  // TTS Engine preference: 'system' (device SpeechSynthesis) | 'online' (Google stream)
+  public ttsEngine: 'system' | 'online' = 'system';
   public hasNativeViVoice: boolean = false;
 
   private chunkQueue: string[] = [];
@@ -109,15 +260,13 @@ class SoundAndSpeechService {
       if (savedEngine === 'system' || savedEngine === 'online') {
         this.ttsEngine = savedEngine;
       } else {
-        this.ttsEngine = 'online'; // Default: Online synchronized Vietnamese for all devices
+        this.ttsEngine = 'system';
       }
 
       if ('speechSynthesis' in window) {
         this.synth = window.speechSynthesis;
         this.initVoices();
-        if (this.synth.onvoiceschanged !== undefined) {
-          this.synth.onvoiceschanged = () => this.initVoices();
-        }
+        window.speechSynthesis.addEventListener('voiceschanged', () => this.initVoices());
       }
     }
   }
@@ -150,42 +299,8 @@ class SoundAndSpeechService {
   }
 
   private initVoices() {
-    if (!this.synth) return;
-    const voices = this.synth.getVoices();
-    if (!voices || voices.length === 0) return;
-
-    // Prefer high-fidelity Vietnamese voices first, then any Vietnamese voice
-    const naturalViVoice = voices.find(v => {
-      const lang = (v.lang || '').toLowerCase().replace(/_/g, '-');
-      const name = (v.name || '').toLowerCase();
-      const isVi = lang.startsWith('vi') || name.includes('vietnam') || name.includes('tiếng việt') || name.includes('vietnamese');
-      return isVi && (name.includes('natural') || name.includes('online') || name.includes('google') || name.includes('hoaimy') || name.includes('namminh'));
-    });
-
-    const anyViVoice = voices.find(v => {
-      const lang = (v.lang || '').toLowerCase().replace(/_/g, '-');
-      const name = (v.name || '').toLowerCase();
-      return (
-        lang.startsWith('vi') ||
-        lang.includes('vi-vn') ||
-        name.includes('vietnam') ||
-        name.includes('tiếng việt') ||
-        name.includes('vietnamese') ||
-        name.includes('linh') ||
-        name.includes('mai') ||
-        name.includes('an (vietnamese')
-      );
-    });
-
-    const chosenVoice = naturalViVoice || anyViVoice;
-
-    if (chosenVoice) {
-      this.voice = chosenVoice;
-      this.hasNativeViVoice = true;
-    } else {
-      this.voice = null;
-      this.hasNativeViVoice = false;
-    }
+    this.voice = loadVietnameseVoice();
+    this.hasNativeViVoice = Boolean(this.voice);
   }
 
   public getVoice(): SpeechSynthesisVoice | null {
@@ -261,7 +376,7 @@ class SoundAndSpeechService {
   /**
    * Speak a text string broken down into animated chunks
    */
-  public speakTextChunks(
+  public async speakTextChunks(
     textOrParagraphs: string | string[],
     options?: {
       rate?: number;
@@ -278,15 +393,17 @@ class SoundAndSpeechService {
       return;
     }
 
-    // Split into chunks for display
+    // Split into chunks for display and audio streaming
     let chunks: string[] = [];
-    if (Array.isArray(textOrParagraphs)) {
-      chunks = textOrParagraphs;
-    } else {
-      chunks = textOrParagraphs
-        .split(/\n+/)
-        .map(p => p.trim())
-        .filter(p => p.length > 0);
+    const rawList = Array.isArray(textOrParagraphs)
+      ? textOrParagraphs
+      : textOrParagraphs.split(/\n+/);
+
+    for (const item of rawList) {
+      const trimmed = item.trim();
+      if (!trimmed) continue;
+      const sub = splitTextForTTS(trimmed, 140);
+      chunks.push(...sub);
     }
 
     // If a dedicated audioUrl is provided and valid, play it and synchronize subtitle chunks
@@ -312,7 +429,18 @@ class SoundAndSpeechService {
     this.onProgressCallback = options?.onProgress || null;
     this.onEndCallback = options?.onEnd || null;
 
-    this.playNextChunk(options?.rate ?? 1.02, options?.pitch ?? 1.05);
+    const viVoice = await ensureVietnameseVoiceLoaded();
+    this.voice = viVoice;
+    this.hasNativeViVoice = Boolean(viVoice);
+
+    const rate = options?.rate ?? 0.95;
+    const pitch = options?.pitch ?? 1.0;
+
+    if (viVoice && this.synth && this.ttsEngine !== 'online') {
+      this.playNextChunk(rate, pitch);
+    } else {
+      this.playNextChunkOnline(rate, pitch);
+    }
   }
 
   private playCustomAudio(
@@ -518,15 +646,26 @@ class SoundAndSpeechService {
     };
 
     audio.onerror = () => {
-      console.warn("Online chunk audio failed, falling back to speech synthesis");
+      console.warn("Online chunk audio failed");
       if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
-      this.playNextChunk(rate, pitch);
+      if (this.synth) {
+        this.playNextChunk(rate, pitch);
+      } else {
+        this.isSpeaking = false;
+        this.currentAudioElement = null;
+        if (this.onEndCallback) this.onEndCallback();
+      }
     };
 
     audio.play().catch(e => {
-      console.warn("Online audio chunk play error, falling back to synth", e);
-      if (this.currentSessionId === sessionId && this.isSpeaking) {
+      console.warn("Online audio chunk play error", e);
+      if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
+      if (this.synth) {
         this.playNextChunk(rate, pitch);
+      } else {
+        this.isSpeaking = false;
+        this.currentAudioElement = null;
+        if (this.onEndCallback) this.onEndCallback();
       }
     });
   }
@@ -590,6 +729,10 @@ class SoundAndSpeechService {
       this.initVoices();
     }
 
+    if (!this.voice) {
+      this.voice = loadVietnameseVoice();
+    }
+
     const utterance = new SpeechSynthesisUtterance(chunk);
     utterance.lang = 'vi-VN';
     if (this.voice) {
@@ -597,6 +740,7 @@ class SoundAndSpeechService {
     }
     utterance.rate = rate;
     utterance.pitch = pitch;
+    utterance.volume = 1.0;
 
     // Prevent GC in Chromium
     if (typeof window !== 'undefined') {
@@ -635,7 +779,7 @@ class SoundAndSpeechService {
   /**
    * Speak a question followed by all 4 options (A, B, C, D) with question text guaranteed to read first
    */
-  public speakQuestionAndOptions(
+  public async speakQuestionAndOptions(
     questionNumber: number,
     questionText: string,
     options: { A: string; B: string; C: string; D: string },
@@ -688,156 +832,402 @@ class SoundAndSpeechService {
       return;
     }
 
-    if (!this.synth) {
-      if (settings?.onEnd) settings.onEnd();
-      return;
-    }
+    // Await voice resolution to detect genuine Vietnamese voice across browsers
+    const viVoice = await ensureVietnameseVoiceLoaded();
+    this.voice = viVoice;
+    this.hasNativeViVoice = Boolean(viVoice);
+
+    if (this.currentSessionId !== sessionId) return;
 
     let currentIndex = 0;
     this.isSpeaking = true;
     this.isPaused = false;
 
-    const playPart = () => {
-      if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
+    // Use native Web Speech if synth is supported and engine is not explicitly online
+    const useNativeSynth = Boolean(this.synth && this.ttsEngine !== 'online');
 
-      if (currentIndex >= parts.length) {
-        this.isSpeaking = false;
-        if (settings?.onPartChange) settings.onPartChange('prompt', '');
-        if (settings?.onEnd) settings.onEnd();
-        return;
-      }
+    if (useNativeSynth && this.synth) {
+      let subIndex = 0;
+      let currentSubChunks: string[] = [];
 
-      const item = parts[currentIndex];
-      if (settings?.onPartChange) {
-        settings.onPartChange(item.part, item.text);
-      }
-
-      if (!this.voice) {
-        this.initVoices();
-      }
-
-      const utterance = new SpeechSynthesisUtterance(item.text);
-      utterance.lang = 'vi-VN';
-      if (this.voice) {
-        utterance.voice = this.voice;
-      }
-      utterance.rate = settings?.rate ?? 1.02;
-      utterance.pitch = settings?.pitch ?? 1.0;
-
-      // Prevent garbage collection in Chromium
-      if (typeof window !== 'undefined') {
-        (window as unknown as { __activeUtterance?: SpeechSynthesisUtterance }).__activeUtterance = utterance;
-      }
-
-      utterance.onend = () => {
+      const playSynthPart = () => {
         if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
-        currentIndex++;
+
         if (currentIndex >= parts.length) {
           this.isSpeaking = false;
           if (settings?.onPartChange) settings.onPartChange('prompt', '');
           if (settings?.onEnd) settings.onEnd();
           return;
         }
-        // Give 450ms pause after reading question before reading options; 280ms between options
-        const pauseTime = item.part === 'question' ? 450 : 280;
-        setTimeout(() => {
-          if (this.currentSessionId === sessionId && this.isSpeaking) {
-            playPart();
-          }
-        }, pauseTime);
-      };
 
-      utterance.onerror = (e) => {
-        if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
-        if (e.error === 'interrupted' || e.error === 'canceled') {
-          return;
+        const item = parts[currentIndex];
+        if (subIndex === 0) {
+          currentSubChunks = splitTextForTTS(item.text, 140);
+          if (settings?.onPartChange) {
+            settings.onPartChange(item.part, item.text);
+          }
         }
-        console.warn("Speech part error:", e.error, "part:", item.part);
-        currentIndex++;
-        if (currentIndex < parts.length) {
+
+        if (subIndex >= currentSubChunks.length) {
+          subIndex = 0;
+          currentIndex++;
+          if (currentIndex >= parts.length) {
+            this.isSpeaking = false;
+            if (settings?.onPartChange) settings.onPartChange('prompt', '');
+            if (settings?.onEnd) settings.onEnd();
+            return;
+          }
+          const pauseTime = item.part === 'question' ? 450 : 280;
           setTimeout(() => {
             if (this.currentSessionId === sessionId && this.isSpeaking) {
-              playPart();
+              playSynthPart();
             }
-          }, 150);
-        } else {
-          this.isSpeaking = false;
-          if (settings?.onEnd) settings.onEnd();
+          }, pauseTime);
+          return;
+        }
+
+        const textToRead = currentSubChunks[subIndex];
+        const utterance = new SpeechSynthesisUtterance(textToRead);
+        utterance.lang = 'vi-VN';
+        if (viVoice) {
+          utterance.voice = viVoice;
+        }
+        utterance.rate = settings?.rate ?? 0.95;
+        utterance.pitch = settings?.pitch ?? 1.0;
+        utterance.volume = 1.0;
+
+        // Prevent garbage collection in Chromium
+        if (typeof window !== 'undefined') {
+          (window as unknown as { __activeUtterance?: SpeechSynthesisUtterance }).__activeUtterance = utterance;
+        }
+
+        utterance.onend = () => {
+          if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
+          subIndex++;
+          const innerPause = subIndex >= currentSubChunks.length ? (item.part === 'question' ? 450 : 280) : 120;
+          if (subIndex >= currentSubChunks.length) {
+            subIndex = 0;
+            currentIndex++;
+          }
+          setTimeout(() => {
+            if (this.currentSessionId === sessionId && this.isSpeaking) {
+              playSynthPart();
+            }
+          }, innerPause);
+        };
+
+        utterance.onerror = (e) => {
+          if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
+          if (e.error === 'interrupted' || e.error === 'canceled') {
+            return;
+          }
+          console.warn("Speech part error:", e.error, "part:", item.part);
+          subIndex++;
+          if (subIndex >= currentSubChunks.length) {
+            subIndex = 0;
+            currentIndex++;
+          }
+          if (currentIndex < parts.length) {
+            setTimeout(() => {
+              if (this.currentSessionId === sessionId && this.isSpeaking) {
+                playSynthPart();
+              }
+            }, 120);
+          } else {
+            this.isSpeaking = false;
+            if (settings?.onEnd) settings.onEnd();
+          }
+        };
+
+        this.currentUtterance = utterance;
+        try {
+          if (this.synth && this.synth.paused) {
+            this.synth.resume();
+          }
+          this.synth?.speak(utterance);
+        } catch (e) {
+          console.warn("Speech speak error", e);
+          subIndex++;
+          if (subIndex >= currentSubChunks.length) {
+            subIndex = 0;
+            currentIndex++;
+          }
+          if (currentIndex < parts.length) {
+            playSynthPart();
+          } else {
+            this.isSpeaking = false;
+            if (settings?.onEnd) settings.onEnd();
+          }
         }
       };
 
-      this.currentUtterance = utterance;
-      try {
-        if (this.synth && this.synth.paused) {
-          this.synth.resume();
+      // Kickoff speech with short initial delay
+      setTimeout(() => {
+        if (this.currentSessionId === sessionId && this.isSpeaking) {
+          playSynthPart();
         }
-        this.synth?.speak(utterance);
-      } catch (e) {
-        console.warn("Speech speak error", e);
-        currentIndex++;
-        if (currentIndex < parts.length) {
-          playPart();
-        } else {
-          this.isSpeaking = false;
-          if (settings?.onEnd) settings.onEnd();
-        }
-      }
-    };
+      }, 80);
+    } else {
+      // Stream Google Vietnamese TTS: Guarantees authentic Vietnamese speech on ANY machine/device
+      let subIndex = 0;
+      let currentSubChunks: string[] = [];
 
-    // Kickoff speech with short initial delay
-    setTimeout(() => {
-      if (this.currentSessionId === sessionId && this.isSpeaking) {
-        playPart();
-      }
-    }, 80);
+      const playOnlinePart = () => {
+        if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
+
+        if (currentIndex >= parts.length) {
+          this.isSpeaking = false;
+          this.currentAudioElement = null;
+          if (settings?.onPartChange) settings.onPartChange('prompt', '');
+          if (settings?.onEnd) settings.onEnd();
+          return;
+        }
+
+        const item = parts[currentIndex];
+        if (subIndex === 0) {
+          currentSubChunks = splitTextForTTS(item.text, 140);
+          if (settings?.onPartChange) {
+            settings.onPartChange(item.part, item.text);
+          }
+        }
+
+        if (subIndex >= currentSubChunks.length) {
+          subIndex = 0;
+          currentIndex++;
+          if (currentIndex >= parts.length) {
+            this.isSpeaking = false;
+            this.currentAudioElement = null;
+            if (settings?.onPartChange) settings.onPartChange('prompt', '');
+            if (settings?.onEnd) settings.onEnd();
+            return;
+          }
+          const pauseTime = item.part === 'question' ? 450 : 280;
+          setTimeout(() => {
+            if (this.currentSessionId === sessionId && this.isSpeaking) {
+              playOnlinePart();
+            }
+          }, pauseTime);
+          return;
+        }
+
+        const textToRead = currentSubChunks[subIndex];
+        const url = getGoogleTTSUrl(textToRead);
+        const audio = new Audio(url);
+        this.currentAudioElement = audio;
+
+        // Preload next audio chunk
+        if (subIndex + 1 < currentSubChunks.length) {
+          const nextAudio = new Audio(getGoogleTTSUrl(currentSubChunks[subIndex + 1]));
+          nextAudio.preload = 'auto';
+        } else if (currentIndex + 1 < parts.length) {
+          const nextPartSub = splitTextForTTS(parts[currentIndex + 1].text, 140);
+          if (nextPartSub.length > 0) {
+            const nextAudio = new Audio(getGoogleTTSUrl(nextPartSub[0]));
+            nextAudio.preload = 'auto';
+          }
+        }
+
+        audio.onended = () => {
+          if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
+          subIndex++;
+          const innerPause = subIndex >= currentSubChunks.length ? (item.part === 'question' ? 450 : 280) : 120;
+          if (subIndex >= currentSubChunks.length) {
+            subIndex = 0;
+            currentIndex++;
+          }
+          setTimeout(() => {
+            if (this.currentSessionId === sessionId && this.isSpeaking) {
+              playOnlinePart();
+            }
+          }, innerPause);
+        };
+
+        audio.onerror = () => {
+          console.warn("Online speech part audio error");
+          if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
+          this.isSpeaking = false;
+          this.currentAudioElement = null;
+          if (settings?.onEnd) settings.onEnd();
+        };
+
+        audio.play().catch((e) => {
+          console.warn("Online audio part play error", e);
+          if (this.currentSessionId !== sessionId || !this.isSpeaking) return;
+          this.isSpeaking = false;
+          this.currentAudioElement = null;
+          if (settings?.onEnd) settings.onEnd();
+        });
+      };
+
+      setTimeout(() => {
+        if (this.currentSessionId === sessionId && this.isSpeaking) {
+          playOnlinePart();
+        }
+      }, 80);
+    }
   }
 
   /**
    * Speak a single option on demand (e.g. when teacher/host clicks mini-speaker on an option)
+   * Always reads in Vietnamese, never in English.
    */
-  public speakSingleOption(optionKey: 'A' | 'B' | 'C' | 'D', text: string, onEnd?: () => void) {
+  public async speakSingleOption(optionKey: 'A' | 'B' | 'C' | 'D', text: string, onEnd?: () => void) {
     this.stop();
-    if (this.isMuted || !this.synth) {
+    if (this.isMuted) {
       if (onEnd) onEnd();
       return;
     }
 
     const spokenText = `Đáp án ${optionKey}: ${cleanSpeechText(text)}`;
-    if (!this.voice) {
-      this.initVoices();
-    }
+    const viVoice = await ensureVietnameseVoiceLoaded();
+    this.voice = viVoice;
+    this.hasNativeViVoice = Boolean(viVoice);
 
-    const utterance = new SpeechSynthesisUtterance(spokenText);
-    utterance.lang = 'vi-VN';
-    if (this.voice) {
-      utterance.voice = this.voice;
-    }
-    utterance.rate = 1.05;
-    utterance.pitch = 1.02;
-
-    if (typeof window !== 'undefined') {
-      (window as unknown as { __activeUtterance?: SpeechSynthesisUtterance }).__activeUtterance = utterance;
-    }
-
-    utterance.onend = () => {
-      this.isSpeaking = false;
-      if (onEnd) onEnd();
-    };
-    utterance.onerror = () => {
-      this.isSpeaking = false;
-      if (onEnd) onEnd();
-    };
-
-    this.isSpeaking = true;
-    try {
-      if (this.synth.paused) {
-        this.synth.resume();
+    if (this.synth && this.ttsEngine !== 'online') {
+      const utterance = new SpeechSynthesisUtterance(spokenText);
+      utterance.lang = 'vi-VN';
+      if (viVoice) {
+        utterance.voice = viVoice;
       }
-      this.synth.speak(utterance);
-    } catch (e) {
-      console.warn("Speak single option error:", e);
-      this.isSpeaking = false;
-      if (onEnd) onEnd();
+      utterance.rate = 0.95;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+
+      if (typeof window !== 'undefined') {
+        (window as unknown as { __activeUtterance?: SpeechSynthesisUtterance }).__activeUtterance = utterance;
+      }
+
+      utterance.onend = () => {
+        this.isSpeaking = false;
+        if (onEnd) onEnd();
+      };
+      utterance.onerror = () => {
+        this.isSpeaking = false;
+        if (onEnd) onEnd();
+      };
+
+      this.isSpeaking = true;
+      try {
+        if (this.synth.paused) {
+          this.synth.resume();
+        }
+        this.synth.speak(utterance);
+      } catch (e) {
+        console.warn("Speak single option error:", e);
+        this.isSpeaking = false;
+        if (onEnd) onEnd();
+      }
+    } else {
+      try {
+        const url = getGoogleTTSUrl(spokenText);
+        const audio = new Audio(url);
+        this.currentAudioElement = audio;
+        this.isSpeaking = true;
+
+        audio.onended = () => {
+          this.isSpeaking = false;
+          this.currentAudioElement = null;
+          if (onEnd) onEnd();
+        };
+        audio.onerror = () => {
+          this.isSpeaking = false;
+          this.currentAudioElement = null;
+          if (onEnd) onEnd();
+        };
+        audio.play().catch(() => {
+          this.isSpeaking = false;
+          this.currentAudioElement = null;
+          if (onEnd) onEnd();
+        });
+      } catch {
+        this.isSpeaking = false;
+        if (onEnd) onEnd();
+      }
+    }
+  }
+
+  /**
+   * Speak a single text phrase strictly in Vietnamese
+   */
+  public async speakSingleText(
+    text: string,
+    options?: { rate?: number; pitch?: number; volume?: number; onEnd?: () => void }
+  ) {
+    this.stop();
+    if (this.isMuted) {
+      if (options?.onEnd) options.onEnd();
+      return;
+    }
+
+    const clean = cleanSpeechText(text);
+    if (!clean) {
+      if (options?.onEnd) options.onEnd();
+      return;
+    }
+
+    const viVoice = await ensureVietnameseVoiceLoaded();
+    this.voice = viVoice;
+    this.hasNativeViVoice = Boolean(viVoice);
+
+    if (this.synth && this.ttsEngine !== 'online') {
+      const utterance = new SpeechSynthesisUtterance(clean);
+      utterance.lang = 'vi-VN';
+      if (viVoice) {
+        utterance.voice = viVoice;
+      }
+      utterance.rate = options?.rate ?? 0.95;
+      utterance.pitch = options?.pitch ?? 1.0;
+      utterance.volume = options?.volume ?? 1.0;
+
+      if (typeof window !== 'undefined') {
+        (window as unknown as { __activeUtterance?: SpeechSynthesisUtterance }).__activeUtterance = utterance;
+      }
+
+      utterance.onend = () => {
+        this.isSpeaking = false;
+        if (options?.onEnd) options.onEnd();
+      };
+      utterance.onerror = () => {
+        this.isSpeaking = false;
+        if (options?.onEnd) options.onEnd();
+      };
+
+      this.isSpeaking = true;
+      try {
+        if (this.synth.paused) {
+          this.synth.resume();
+        }
+        this.synth.speak(utterance);
+      } catch {
+        this.isSpeaking = false;
+        if (options?.onEnd) options.onEnd();
+      }
+    } else {
+      try {
+        const url = getGoogleTTSUrl(clean);
+        const audio = new Audio(url);
+        this.currentAudioElement = audio;
+        this.isSpeaking = true;
+
+        audio.onended = () => {
+          this.isSpeaking = false;
+          this.currentAudioElement = null;
+          if (options?.onEnd) options.onEnd();
+        };
+        audio.onerror = () => {
+          this.isSpeaking = false;
+          this.currentAudioElement = null;
+          if (options?.onEnd) options.onEnd();
+        };
+        audio.play().catch(() => {
+          this.isSpeaking = false;
+          this.currentAudioElement = null;
+          if (options?.onEnd) options.onEnd();
+        });
+      } catch {
+        this.isSpeaking = false;
+        if (options?.onEnd) options.onEnd();
+      }
     }
   }
 
