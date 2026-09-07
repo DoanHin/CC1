@@ -230,13 +230,21 @@ export async function loadGameConfig(): Promise<GameContentConfig> {
           restoredQuestions.length === 16 &&
           restoredQuestions[0]?.question?.includes("chất Tô Hiệu");
 
+        const isOldInformaticsTieBreaker =
+          !data.tieBreakerQuestion ||
+          data.tieBreakerQuestion.question?.includes("IPv4") ||
+          data.tieBreakerQuestion.question?.includes("máy tính") ||
+          data.tieBreakerQuestion.question?.includes("bit nhị phân");
+
         const merged: GameContentConfig = {
           ...DEFAULT_GAME_CONFIG,
           ...data,
           greetingAudioUrl: restoredGreetingAudio,
           azeroImageUrl: restoredAzeroImage,
           questions: hasValidNewQuestions ? restoredQuestions : DEFAULT_GAME_CONFIG.questions,
-          tieBreakerQuestion: data.tieBreakerQuestion || DEFAULT_GAME_CONFIG.tieBreakerQuestion,
+          tieBreakerQuestion: isOldInformaticsTieBreaker
+            ? DEFAULT_GAME_CONFIG.tieBreakerQuestion
+            : data.tieBreakerQuestion,
         };
 
         // Cache safe metadata to localStorage
@@ -274,10 +282,19 @@ export async function loadGameConfig(): Promise<GameContentConfig> {
         parsed.questions.length === 16 &&
         parsed.questions[0]?.question?.includes("chất Tô Hiệu");
 
+      const isOldInformaticsTieBreaker =
+        !parsed.tieBreakerQuestion ||
+        parsed.tieBreakerQuestion.question?.includes("IPv4") ||
+        parsed.tieBreakerQuestion.question?.includes("máy tính") ||
+        parsed.tieBreakerQuestion.question?.includes("bit nhị phân");
+
       return {
         ...DEFAULT_GAME_CONFIG,
         ...parsed,
         questions: hasValidNewQuestions ? parsed.questions : DEFAULT_GAME_CONFIG.questions,
+        tieBreakerQuestion: isOldInformaticsTieBreaker
+          ? DEFAULT_GAME_CONFIG.tieBreakerQuestion
+          : parsed.tieBreakerQuestion,
       };
     }
   } catch (e) {

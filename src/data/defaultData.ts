@@ -221,15 +221,15 @@ export const DEFAULT_QUESTIONS = [
 
 export const DEFAULT_TIE_BREAKER_QUESTION = {
   id: 99,
-  question: "CÂU HỎI PHỤ QUYẾT ĐỊNH: Trong công nghệ mạng máy tính và Internet, địa chỉ IP chuẩn IPv4 gồm bao nhiêu bit nhị phân?",
+  question: "CÂU HỎI PHỤ QUYẾT ĐỊNH: Trong hoạt động tập thể, khi các thành viên trong đội nảy sinh bất đồng ý kiến gay gắt, cách xử lý tình huống nào sau đây thể hiện văn hóa ứng xử văn minh và tinh thần trách nhiệm cao nhất?",
   options: {
-    A: "16 bit",
-    B: "32 bit",
-    C: "64 bit",
-    D: "128 bit"
+    A: "Người nào có tiếng nói lớn hơn thì quyết định để tiết kiệm thời gian",
+    B: "Bình tĩnh lắng nghe góc nhìn của nhau, tôn trọng sự khác biệt và cùng thống nhất phương án tối ưu vì mục tiêu chung",
+    C: "Giải tán nhóm và yêu cầu giáo viên xử phạt những bạn có ý kiến bất đồng",
+    D: "Im lặng, không đóng góp ý kiến và phó mặc kết quả cho người khác"
   },
   correctAnswer: "B" as const,
-  explanation: "Địa chỉ IPv4 gồm 32 bit, chia làm 4 octet (mỗi octet 8 bit). Trong khi IPv6 gồm 128 bit."
+  explanation: "Khi xảy ra bất đồng trong hoạt động tập thể, thái độ bình tĩnh, lắng nghe tích cực và tôn trọng sự khác biệt để tìm ra giải pháp tối ưu vì mục tiêu chung là biểu hiện chuẩn mực của văn hóa ứng xử và tinh thần đoàn kết."
 };
 
 export const DEFAULT_GAME_CONFIG: GameContentConfig = {
